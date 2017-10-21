@@ -1,0 +1,24 @@
+.StopList ul {
+  list-style: none;
+}
+
+.StopList li {
+  margin: 0;
+  border: 1px solid #9E9E9E;
+  border-bottom: none;
+}
+
+.StopList li:last-child {
+  border-bottom: 1px solid #9E9E9E;
+}
+
+.StopList a {
+  display: block;
+  overflow: hidden;
+  text-decoration: none;
+  padding: 0.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: #eae8e8;
+  color: #545454;
+}

@@ -1,0 +1,25 @@
+{
+  "name": "geospatial_backend",
+  "version": "1.0.0",
+  "description": "example geospatial app with nodeJS and postgreSQL",
+  "scripts": {
+    "start": "node ./src",
+    "dev": "nodemon --watch ./src -x \"npm start\"",
+    "db:migrate": "db-migrate up",
+    "db:rollback": "db-migrate down",
+    "db:createMigration": "db-migrate create"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.18.2",
+    "cors": "^2.8.4",
+    "express": "^4.15.2",
+    "lodash": "^4.17.4",
+    "massive": "^4.4.0"
+  },
+  "devDependencies": {
+    "db-migrate": "^0.10.0-beta.24",
+    "db-migrate-pg": "^0.2.5",
+    "nodemon": "^1.11.0"
+  }
+}

@@ -1,0 +1,37 @@
+.Search {
+  margin-top: 1rem;
+}
+
+.Search__FullTextInput input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+}
+
+.Search__Toggle {
+  display: block;
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  padding-bottom: 1rem;
+  text-align: right;
+}
+
+.Search__Toggle a {
+  text-decoration: none;
+}
+
+.Search__AdvancedSearch {
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+}
+
+.Search__AdvancedSearch label {
+  display: block;
+}
+
+.Search__AdvancedSearch span {
+  display: inline-block;
+  min-width: 10rem;
+  text-align: right;
+  margin-right: 0.5rem;
+}

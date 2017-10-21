@@ -1,0 +1,24 @@
+.EditStop label {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.EditStop label > * {
+  display: block;
+}
+
+.EditStop__close {
+  text-align: right;
+}
+
+.EditStop a, .EditStop a:visited  {
+  display: block;
+  margin: 0.5rem 0;
+  font-size: 0.8em;
+  text-decoration: none;
+  color: blue;
+}
+
+.EditStop__actions button {
+  margin-right: 2rem;
+}

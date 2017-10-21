@@ -1,0 +1,45 @@
+version: '2'
+
+volumes:
+  dbvolume:
+
+services:
+  frontend:
+    image: node:8.6.0-alpine
+    working_dir: /usr/app
+    command: ash -c "yarn && npm run start"
+    volumes:
+      - ./frontend:/usr/app
+    ports:
+      - 3000:3000
+    environment:
+      REACT_APP_API_HOST: http://localhost:3001
+
+  backend:
+    image: node:8.6.0-alpine
+    working_dir: /usr/app
+    command: ash -c "yarn && npm run dev"
+    volumes:
+      - ./backend:/usr/app
+    ports:
+      - 3001:3000
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgres://geoapp@postgres/geoapp
+
+  postgres:
+    image: postgres:9.6.5-alpine
+    environment:
+      POSTGRES_USER: geoapp
+      POSTGRES_DB: geoapp
+    volumes:
+      - dbvolume:/var/lib/postgresql/data
+      - ./sampleData:/sampleData
+
+  tiles:
+    image: klokantech/openmaptiles-server
+    volumes:
+      - ./tiles:/data
+    ports:
+      - 3002:80
