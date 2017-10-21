@@ -1,44 +1,156 @@
-## Parte 1 - Configuración Inicial
-Si antes del taller descargaste todos los archivos y configuraste el proyecto
-correctamente, puedes omitir esta sección.
+## Parte 2 - CRUD paradas
 
-Si aún no has configurado el proyecto, sigue los siguientes pasos:
+En Panamá existen paradas de autobús con internet gratuito, llamadas "Paradas
+SmartCity".
 
-1. Tienes 2 opciones para descargar los archivos:
-    - Descargar los archivos que estaremos pasando por USB
-    - Descargar los archivos desde el servidor web que está corriendo en `http://192.x.x.x`
+En los próximos 15 minutos vamos a crear una aplicación que nos permita guardar
+la ubicación de estas paradas.
 
-2. Edita el archivo `docker-compose.yml`. Borra las siguientes líneas:
+1. Crear una tabla para nuestras paradas SmartCity. Vamos a utilizar una
+  migración para esto:
   ```
-  tiles:
-    image: klokantech/openmaptiles-server
-    volumes:
-      - ./tiles:/data
-    ports:
-      - 3002:80
+  docker-compose exec backend npm run db:createMigration -- add-table-stops --sql-file
+  sudo chown -R $USER:$USER backend/migrations
   ```
 
-3. Edita el archivo `frontend/src/components/Map/component.js` para usar OpenStreetMap en vez `localhost:3002`.
+2. Up migration
   ```
-  const mapURL = 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'; // OpenStreetMap
-  // const mapURL = 'http://localhost:3002/styles/osm-bright/{z}/{x}/{y}.png'; // Local Tiles Server
-  ```
-
-4. Carga las imágenes de docker (para no tener que descargarlas de internet):
-  ```
-  docker load -i ~/Downloads/node:8.6.0-alpine
-  docker load -i ~/Downloads/postgres:9.6.5-alpine
-  ```
-
-5. Arranca los contenedores de docker:
-  ```
-  docker-compose up
+  # backend/migrations/sqls/<timestamp>-add-table-stops-up.sql
+  CREATE TABLE stops (
+    id SERIAL NOT NULL PRIMARY KEY,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    description text
+  );
   ```
 
-  Los siguientes servicios deben estar funcionando:
-  - Frontend: http://localhost:3000/  
-    Debe mostrar un mensaje de "Error al cargar paradas".
-  - Backend: http://localhost:3001/  
-    Debe mostrar un mensaje de "Backend is Working!"
-  - Postgres: `docker-compose exec postgres psql postgres://geoapp@postgres/geoapp`  
-    Debe permitir la conexión a psql.
+3. Down migration
+  ```
+  # backend/migrations/sqls/<timestamp>-add-table-stops-down.sql
+  DROP TABLE stops;
+  ```
+
+4. Corremos nuestras migraciones:
+  ```
+  docker-compose exec backend npm run db:migrate
+  ```
+
+  Siempre es bueno probar que podemos rollback:
+  ```
+  docker-compose exec backend npm run db:rollback
+  ```
+
+  Para asegurarnos que las tablas se crearon correctamente:
+  ```
+  # conectarse a postgres
+  docker-compose exec postgres psql postgres://geoapp@postgres/geoapp
+
+  # mostar tablas
+  \d
+
+  # mostrar descripción de la tabla stops
+  \d stops
+  ```
+
+5. Crear la conexión a Massive.JS
+  ```
+  // backend/src/app.js
+  const massive = require('massive');
+
+  // connect massive.js
+  app.use((req, res, next) => {
+    if (app.get('db')) return next();
+    massive({ connectionString : process.env.DATABASE_URL })
+    .then(instance => app.set('db', instance))
+    .then(() => next())
+    .catch(err => next(err));
+  });
+  ```
+
+6. Endpoint para listar todas las paradas
+  ```
+  // backend/src/stops.js
+  const express = require('express');
+  const router = express.Router();
+
+  const DEFAULT_LIMIT = 300;
+
+  /*
+   * Get all stops.
+   */
+  router.get('/', async (req, res, next) => {
+    try {
+      const table = req.app.get('db').stops;
+      const result = await table.find({}, { limit: DEFAULT_LIMIT });
+      res.json(result);
+    } catch (err) { next(err); }
+  });
+
+  module.exports = router;
+  ```
+
+  ``` backend/src/app.js
+  app.use('/stops', require('./stops'));
+  ```
+
+7. Endpoint para crear paradas
+  ```
+  // backend/src/stops.js
+  const bodyParser = require('body-parser');
+  router.use(bodyParser.json());
+
+  /*
+   * Create a stop.
+   *
+   * JSON Body:
+   *  - latitude <Decimal>
+   *  - longitude <Decimal>
+   *  - description <String>
+   */
+  router.post('/', async (req, res, next) => {
+   try {
+     const table = req.app.get('db').stops;
+     const result = await table.insert(req.body);
+     res.json(result);
+   } catch (err) { next(err); }
+  });
+  ```
+
+8. Endpoint para actualizar paradas
+  ```
+  // backend/src/stops.js
+  /*
+   * Update a stop.
+   *
+   * JSON Body:
+   *  - latitude <Decimal>
+   *  - longitude <Decimal>
+   *  - description <String>
+   */
+  router.put('/:id', async (req, res, next) => {
+    try {
+      const table = req.app.get('db').stops;
+      const result = await table.update({
+        ...req.body,
+        id: req.params.id
+      });
+      res.json(result);
+    } catch (err) { next(err); }
+  });
+  ```
+
+9. Endpoint para borrar paradas
+  ```
+  // backend/src/stops.js
+  /*
+   * Delete a stop.
+   */
+  router.delete('/:id', async (req, res, next) => {
+    try {
+      const table = req.app.get('db').stops;
+      const id = parseInt(req.params.id, 10);
+      const result = await table.destroy(id);
+      res.json(result);
+    } catch (err) { next(err); }
+  });
+  ```
