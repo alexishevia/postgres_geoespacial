@@ -11,16 +11,42 @@ router.use(bodyParser.json());
  *
  * Query Params:
  * - q: text search
+ * - latlondist: filter by location. Format: <latitude>,<longitude>,<distance in meters>.
+ *   Distance defaults to DEFAULT_DISTANCE.
  */
 router.get('/', async (req, res, next) => {
   try {
-    const { q } = req.query;
+    const { q = '', latlondist = '' } = req.query;
+    const [ lat, lon, distance ] = latlondist.split(',').filter(obj => !!obj);
     const table = req.app.get('db').stops;
-    let query = 'true';
-    if (q && q.length) {
-      query = "to_tsvector('spanish', description) @@ plainto_tsquery('spanish', ${q})";
+    const queries = [];
+
+    // full-text search
+    if (q) {
+      queries.push(`
+        to_tsvector(\${lang}, description) @@ plainto_tsquery(\${lang}, \${q})
+      `)
     }
-    const result = await table.where(query, { q }, { limit: DEFAULT_LIMIT });
+
+    // location
+    if (lat && lon && distance) {
+      queries.push(`
+        earth_box(
+          ll_to_earth(\${lat}, \${lon}),
+          \${distance}
+        ) @> ll_to_earth(latitude, longitude)
+        AND earth_distance(
+          ll_to_earth(latitude, longitude),
+          ll_to_earth(\${lat}, \${lon})
+        ) < \${distance}
+      `)
+    }
+
+    const query = queries.length ? queries.join(' AND ') : 'true';
+    const result = await table.where(
+      query, { lang: 'spanish', q, lat, lon, distance },
+      { limit: DEFAULT_LIMIT, build: false}
+    );
     res.json(result);
   } catch (err) { next(err); }
 });
