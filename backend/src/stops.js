@@ -8,11 +8,19 @@ router.use(bodyParser.json());
 
 /*
  * Get all stops.
+ *
+ * Query Params:
+ * - q: text search
  */
 router.get('/', async (req, res, next) => {
   try {
+    const { q } = req.query;
     const table = req.app.get('db').stops;
-    const result = await table.find({}, { limit: DEFAULT_LIMIT });
+    let query = 'true';
+    if (q && q.length) {
+      query = "to_tsvector('spanish', description) @@ plainto_tsquery('spanish', ${q})";
+    }
+    const result = await table.where(query, { q }, { limit: DEFAULT_LIMIT });
     res.json(result);
   } catch (err) { next(err); }
 });
