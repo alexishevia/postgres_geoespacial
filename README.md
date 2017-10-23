@@ -1,100 +1,112 @@
-### Parte 4 - Búsquedas geográficas
-Utilizar la ubicación geográfica del usuario para filtar resultados.
+## Bonus - Denver Crimes
+El tiempo restante lo utilizaremos para crear un API para consultar las
+ocurrencias de crímenes en Denver.
 
-1. Agregar la extensión [earthdistance](https://www.postgresql.org/docs/current/static/earthdistance.html):
+1. Copia el archivo [crimes.csv](https://www.denvergov.org/media/gis/DataCatalog/crime/csv/crime.csv) a la carpeta `sampleData`.
+
+2. Crea la tabla "crimes"
   ``` sh
-  docker-compose exec backend npm run db:createMigration -- add-extension-earthdistance --sql-file
+  docker-compose exec backend npm run db:createMigration -- add-table-crimes --sql-file
   sudo chown -R $USER:$USER backend/migrations
   ```
 
   ```
-  # backend/migrations/sqls/<timestamp>-add-extension-earthdistance-up.sql
-  CREATE EXTENSION cube;
-  CREATE EXTENSION earthdistance;
+  # backend/migrations/sqls/<timestamp>-add-table-crimes-up.sql
+  CREATE TABLE crimes (
+    ID SERIAL NOT NULL PRIMARY KEY,
+    INCIDENT_ID BIGINT,
+    OFFENSE_ID BIGINT,
+    OFFENSE_CODE INTEGER,
+    OFFENSE_CODE_EXTENSION INTEGER,
+    OFFENSE_TYPE_ID TEXT,
+    OFFENSE_CATEGORY_ID TEXT,
+    FIRST_OCCURRENCE_DATE TIMESTAMPTZ,
+    LAST_OCCURRENCE_DATE TIMESTAMPTZ,
+    REPORTED_DATE TIMESTAMPTZ,
+    INCIDENT_ADDRESS TEXT,
+    GEO_X BIGINT,
+    GEO_Y BIGINT,
+    GEO_LON DOUBLE PRECISION,
+    GEO_LAT DOUBLE PRECISION,
+    DISTRICT_ID INTEGER,
+    PRECINCT_ID INTEGER,
+    NEIGHBORHOOD_ID TEXT,
+    IS_CRIME SMALLINT,
+    IS_TRAFFIC SMALLINT
+  );
   ```
 
   ```
-  # backend/migrations/sqls/<timestamp>-add-extension-earthdistance-down.sql
-  DROP EXTENSION earthdistance;
-  DROP EXTENSION cube;
+  # backend/migrations/sqls/<timestamp>-add-table-crimes-up.sql
+  DROP TABLE crimes;
   ```
 
   ``` sh
   docker-compose exec backend npm run db:migrate
   ```
 
-2. Actualizar `GET /stops` para que acepte coordenadas geográficas
-  ```
-  /*
-   * Get all stops.
-   *
-   * Query Params:
-   * - q: text search
-   * - latlondist: filter by location. Format: <latitude>,<longitude>,<distance in meters>.
-   *   Distance defaults to DEFAULT_DISTANCE.
-   */
-  router.get('/', async (req, res, next) => {
-    try {
-      const { q, latlondist = '' } = req.query;
-      const [ lat, lon, distance ] = latlondist.split(',').filter(obj => !!obj);
-      const table = req.app.get('db').stops;
-      const queries = [];
-
-      // full-text search
-      if (q) {
-        queries.push(`
-          to_tsvector(\${lang}, description) @@ plainto_tsquery(\${lang}, \${q})
-        `)
-      }
-
-      // location
-      if (lat && lon && distance) {
-        queries.push(`
-          earth_box(
-            ll_to_earth(\${lat}, \${lon}),
-            \${distance}
-          ) @> ll_to_earth(latitude, longitude)
-          AND earth_distance(
-            ll_to_earth(latitude, longitude),
-            ll_to_earth(\${lat}, \${lon})
-          ) < \${distance}
-        `)
-      }
-
-      const query = queries.length ? queries.join(' AND ') : 'true';
-      const result = await table.where(
-        query, { lang: 'spanish', q, lat, lon, distance },
-        { limit: DEFAULT_LIMIT, build: false}
-      );
-      res.json(result);
-    } catch (err) { next(err); }
-  });
-  ```
-
-3. Agregar índice geoespacial
+3. Carga datos de ejemplo a la tabla
   ``` sh
   docker-compose exec postgres psql postgres://geoapp@postgres/geoapp
 
-  EXPLAIN SELECT id FROM stops
-  WHERE earth_box(ll_to_earth(8.9, -79.5), 1000) @> ll_to_earth(latitude, longitude);
+  COPY crimes (
+    INCIDENT_ID,
+    OFFENSE_ID,
+    OFFENSE_CODE,
+    OFFENSE_CODE_EXTENSION,
+    OFFENSE_TYPE_ID,
+    OFFENSE_CATEGORY_ID,
+    FIRST_OCCURRENCE_DATE,
+    LAST_OCCURRENCE_DATE,
+    REPORTED_DATE,
+    INCIDENT_ADDRESS,
+    GEO_X,
+    GEO_Y,
+    GEO_LON,
+    GEO_LAT,
+    DISTRICT_ID,
+    PRECINCT_ID,
+    NEIGHBORHOOD_ID,
+    IS_CRIME,
+    IS_TRAFFIC
+  )
+  FROM '/sampleData/crime.csv'
+  WITH (
+    FORMAT CSV,
+    HEADER true,
+    FORCE_NULL (
+      INCIDENT_ID,
+      OFFENSE_ID,
+      OFFENSE_CODE,
+      OFFENSE_CODE_EXTENSION,
+      OFFENSE_TYPE_ID,
+      OFFENSE_CATEGORY_ID,
+      FIRST_OCCURRENCE_DATE,
+      LAST_OCCURRENCE_DATE,
+      REPORTED_DATE,
+      INCIDENT_ADDRESS,
+      GEO_X,
+      GEO_Y,
+      GEO_LON,
+      GEO_LAT,
+      DISTRICT_ID,
+      PRECINCT_ID,
+      NEIGHBORHOOD_ID,
+      IS_CRIME,
+      IS_TRAFFIC
+    )
+  );
   ```
 
-  ``` sh
-  docker-compose exec backend npm run db:createMigration -- add-index-stops-latlon --sql-file
-  sudo chown -R $USER:$USER backend/migrations
-  ```
+4. Desarrolla un API que nos permita interactuar con la data de la tabla "crimes"
 
-  ```
-  # backend/migrations/sqls/<timestamp>-add-index-stops-latlon-up.sql
-  CREATE INDEX stops_latlon_index ON stops
-  USING gist (ll_to_earth(latitude, longitude));
-  ```
+  Query Params:
+  - categories: filter by crime category. Format: `<categoryA>,<categoryB>,<categoryC>`
+  - dateRange: filter by occurrence time. Format: `<start date>..<end date>`. Dates must use iso 8601 format
+  - latlondist: filter by location. Format: `<latitude>,<longitude>,<distance in meters>`. Distance defaults to `DEFAULT_DISTANCE`.
+  - limit: amount of results to return. Defaults to `DEFAULT_LIMIT`.
 
+  Ejemplo:
   ```
-  # backend/migrations/sqls/<timestamp>-add-index-stops-latlon-down.sql
-  DROP INDEX stops_latlon_index;
-  ```
-
-  ``` sh
-  docker-compose exec backend npm run db:migrate
+  /crimes?categories=larceny,robbery&dateRange=2016-12-31T20:00-07..2017-01-01T10:00-07&latlondist=39.7281673,-104.9729902,9000&limit=2
   ```
