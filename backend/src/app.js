@@ -19,5 +19,6 @@ app.get('/', function (req, res) {
 });
 
 app.use('/stops', require('./stops'));
+app.use('/crimes', require('./crimes'));
 
 module.exports = app;
